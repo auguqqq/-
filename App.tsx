@@ -22,7 +22,8 @@ import {
   CheckCircle2,
   Sparkles,
   FileOutput,
-  Feather
+  Feather,
+  PenTool
 } from 'lucide-react';
 import Editor from './components/Editor';
 import Bookshelf from './components/Bookshelf';
@@ -51,26 +52,34 @@ const NavButton = ({
   isActive, 
   onClick, 
   disabled = false,
-  activeColor = 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
-}: { icon: any, label: string, isActive?: boolean, onClick: () => void, disabled?: boolean, activeColor?: string }) => (
+  isDanger = false
+}: { icon: any, label: string, isActive?: boolean, onClick: () => void, disabled?: boolean, isDanger?: boolean }) => (
   <button
     onClick={onClick}
     disabled={disabled}
     className={`
-      relative group flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-300
-      ${disabled ? 'opacity-20 cursor-not-allowed' : 'cursor-pointer'}
+      relative group flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-300 ease-out
+      ${disabled ? 'opacity-20 cursor-not-allowed' : 'cursor-pointer hover:scale-105 active:scale-95'}
       ${isActive 
-        ? activeColor 
-        : 'text-gray-400 hover:bg-white/10 hover:text-white'
+        ? (isDanger 
+            ? 'bg-red-500/10 text-red-400 shadow-[0_0_20px_rgba(248,113,113,0.1)] ring-1 ring-red-500/20' 
+            : 'bg-[#2c2c2e] text-amber-400 shadow-[0_4px_12px_rgba(0,0,0,0.2)] ring-1 ring-white/5')
+        : 'text-[#8e8e93] hover:text-white hover:bg-[#2c2c2e]'
       }
     `}
   >
-    <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+    {/* Stroke width increased here: 2 for normal, 2.5 for active */}
+    <Icon size={22} strokeWidth={isActive ? 2.5 : 2} className="transition-transform duration-300" />
     
-    {/* Tooltip */}
-    <span className="absolute left-14 bg-gray-900 text-white text-xs font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none tracking-wider shadow-xl border border-white/10 translate-x-[-10px] group-hover:translate-x-0 duration-200">
+    {/* Minimalist Tooltip */}
+    <span className="absolute left-16 bg-[#2c2c2e] text-white text-[10px] font-bold tracking-widest uppercase px-3 py-1.5 rounded-lg border border-white/5 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-[-8px] group-hover:translate-x-0 pointer-events-none z-50 whitespace-nowrap shadow-xl">
       {label}
     </span>
+    
+    {/* Active Indicator (Subtle Glow) */}
+    {isActive && !isDanger && (
+      <span className="absolute inset-0 rounded-2xl bg-amber-500/5 pointer-events-none" />
+    )}
   </button>
 );
 
@@ -410,7 +419,6 @@ const App: React.FC = () => {
   };
 
   const toggleRightSidebar = (mode: ViewMode) => {
-    // If we are not in editor mode (e.g. Bookshelf or Settings), switch to Editor first
     if (viewMode !== ViewMode.Editor) {
       setViewMode(ViewMode.Editor);
       setRightSidebarMode(mode);
@@ -433,60 +441,63 @@ const App: React.FC = () => {
 
   return (
     <div className={`flex h-screen w-screen transition-colors duration-1000 overflow-hidden font-sans ${themeClasses[effectiveTheme]}`}>
-      {/* Optimized Sidebar */}
-      <nav className={`w-20 flex flex-col items-center py-8 space-y-4 z-50 shrink-0 transition-all duration-500 ease-in-out border-r border-white/5 ${blackHouse.active ? 'bg-black/95' : 'bg-[#1e293b]'}`}>
+      {/* High-End Minimalist Sidebar - Charcoal Black Background */}
+      <nav className="w-[88px] flex flex-col items-center py-8 gap-y-4 z-50 shrink-0 transition-all duration-500 ease-in-out bg-[#1c1c1e] shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5">
         
-        {/* Brand / Home Group */}
-        <div className="flex flex-col items-center space-y-2 mb-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20 mb-2 cursor-pointer" onClick={() => setViewMode(ViewMode.Bookshelf)}>
-               <Feather className="text-white" size={20} />
+        {/* Brand */}
+        <div className="flex flex-col items-center mb-4">
+            <div 
+              className="w-10 h-10 text-white/90 flex items-center justify-center hover:text-white hover:scale-110 transition-all cursor-pointer active:scale-95 duration-300 drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]" 
+              onClick={() => setViewMode(ViewMode.Bookshelf)}
+              title="墨香笔耕"
+            >
+               {/* Increased logo stroke width */}
+               <Feather size={28} strokeWidth={2.5} />
             </div>
-            <NavButton 
+        </div>
+
+        {/* Main Tools Group */}
+        <div className="flex flex-col items-center gap-y-3 w-full">
+          <NavButton 
               icon={Library} 
-              label="作品书架" 
+              label="书架" 
               isActive={viewMode === ViewMode.Bookshelf} 
               onClick={() => !blackHouse.active && setViewMode(ViewMode.Bookshelf)} 
               disabled={blackHouse.active}
-            />
-        </div>
-
-        <div className="w-8 h-px bg-white/10 my-2" />
-
-        {/* Writing Tools Group */}
-        <div className="flex flex-col items-center space-y-3">
+          />
           <NavButton 
-              icon={Type} 
-              label="码字模式" 
+              icon={PenTool} 
+              label="创作" 
               isActive={viewMode === ViewMode.Editor && !sidebarOpen} 
               onClick={() => { setViewMode(ViewMode.Editor); setSidebarOpen(false); }} 
           />
           <NavButton 
               icon={Layout} 
-              label="章节大纲" 
+              label="大纲" 
               isActive={viewMode === ViewMode.Editor && sidebarOpen && rightSidebarMode === ViewMode.Outline} 
               onClick={() => toggleRightSidebar(ViewMode.Outline)} 
           />
           <NavButton 
               icon={HistoryIcon} 
-              label="历史版本" 
+              label="版本" 
               isActive={viewMode === ViewMode.Editor && sidebarOpen && rightSidebarMode === ViewMode.History} 
               onClick={() => toggleRightSidebar(ViewMode.History)} 
           />
           <NavButton 
               icon={Lightbulb} 
-              label="灵感便签" 
+              label="灵感" 
               isActive={viewMode === ViewMode.Editor && sidebarOpen && rightSidebarMode === ViewMode.Inspiration} 
               onClick={() => toggleRightSidebar(ViewMode.Inspiration)} 
           />
           <NavButton 
               icon={Search} 
-              label="资料检索" 
+              label="检索" 
               isActive={viewMode === ViewMode.Editor && sidebarOpen && rightSidebarMode === ViewMode.Search} 
               onClick={() => toggleRightSidebar(ViewMode.Search)} 
           />
           <NavButton 
               icon={BarChart2} 
-              label="数据统计" 
+              label="统计" 
               isActive={viewMode === ViewMode.Editor && sidebarOpen && rightSidebarMode === ViewMode.Statistics} 
               onClick={() => toggleRightSidebar(ViewMode.Statistics)} 
           />
@@ -495,23 +506,22 @@ const App: React.FC = () => {
         <div className="flex-grow" />
 
         {/* System Group */}
-        <div className="flex flex-col items-center space-y-3 pb-2">
+        <div className="flex flex-col items-center gap-y-3 pb-4">
            <NavButton 
               icon={effectiveTheme === 'dark' ? Sun : Moon} 
-              label="切换主题" 
+              label="主题" 
               onClick={() => setAppSettings(p => ({ ...p, theme: effectiveTheme === 'dark' ? 'cream' : 'dark' }))} 
-              activeColor="text-white bg-white/20"
            />
            <NavButton 
               icon={blackHouse.active ? Lock : Unlock} 
-              label={blackHouse.active ? "专注进行中" : "进入小黑屋"} 
+              label={blackHouse.active ? "锁定中" : "小黑屋"} 
               isActive={blackHouse.active} 
+              isDanger={blackHouse.active}
               onClick={() => blackHouse.active ? null : setIsSettingUpBlackHouse(true)}
-              activeColor="bg-red-500 text-white shadow-lg shadow-red-500/30"
            />
            <NavButton 
               icon={SettingsIcon} 
-              label="系统设置" 
+              label="设置" 
               isActive={viewMode === ViewMode.Settings} 
               onClick={() => !blackHouse.active && setViewMode(ViewMode.Settings)} 
               disabled={blackHouse.active}

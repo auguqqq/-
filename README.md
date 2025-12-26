@@ -1,20 +1,151 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# 笔纪 (Inkflow Studio)
 
-This contains everything you need to run your app locally.
+**专注中文创作的现代化码字助手**
 
-View your app in AI Studio: https://ai.studio/apps/drive/17SJngp2jVszD6aa78gsYolNY7FCMntkA
+笔纪是一款专为网络文学作者和中文写作者设计的 Web 应用程序。它结合了极简主义的视觉设计、强大的自动排版功能、沉浸式的小黑屋模式以及基于大语言模型（Gemini/DeepSeek/OpenAI）的智能创作辅助，致力于让写作回归纯粹与高效。
 
-## Run Locally
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![React](https://img.shields.io/badge/React-19.0-61dafb.svg)
+![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.0-38bdf8.svg)
 
-**Prerequisites:**  Node.js
+---
 
+## ✨ 核心功能
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+*   **沉浸式创作体验**：支持多种护眼主题（象牙白、水墨黑、护眼绿等）和全屏专注模式。
+*   **智能排版**：一键自动缩进、段落优化，符合中文出版与网文排版规范。
+*   **小黑屋模式**：强制锁定屏幕，设定字数或时间目标，杜绝摸鱼，不达标不解锁。
+*   **AI 责编助手**：
+    *   **剧情复盘**：AI 自动阅读正文，提炼章节梗概。
+    *   **文笔评估**：提供专业的文笔润色建议和节奏分析。
+    *   **灵感激发**：卡文时与 AI 对话，获取后续剧情走向建议。
+    *   **资料检索**：内置 AI 联网/知识库检索，快速查找历史背景、器物设定等。
+*   **多书架管理**：支持创建多部作品，自动统计全书字数、章节数。
+*   **数据统计**：可视化展示每日码字量、连续打卡天数及周产量趋势。
+*   **版本回溯**：自动保存章节历史版本，随时一键还原，防止误删。
+*   **本地优先**：所有数据（除 AI 交互外）均存储在本地浏览器，保障隐私安全。
+
+---
+
+## 🛠️ 部署与安装
+
+本项目是基于 React + TypeScript + Tailwind CSS 构建的纯前端应用。
+
+### 方式一：本地开发运行
+
+确保您的环境中已安装 [Node.js](https://nodejs.org/) (推荐 v18+)。
+
+1.  **克隆仓库**（假设您已获取源码）：
+    ```bash
+    git clone https://github.com/your-username/inkflow-studio.git
+    cd inkflow-studio
+    ```
+
+2.  **安装依赖**：
+    ```bash
+    npm install
+    # 或者使用 yarn
+    yarn install
+    ```
+
+3.  **配置环境变量** (可选)：
+    如果您希望在构建时内置 Gemini API Key，请在根目录创建 `.env` 文件：
+    ```env
+    REACT_APP_API_KEY=your_gemini_api_key_here
+    ```
+    *注：用户也可以稍后在软件的“设置”界面中手动输入 Key，这是推荐的方式（BYOK模式）。*
+
+4.  **启动开发服务器**：
+    ```bash
+    npm start
+    ```
+    浏览器将自动打开 `http://localhost:3000`。
+
+### 方式二：静态部署 (Vercel/Netlify)
+
+由于是纯静态单页应用 (SPA)，您可以轻松部署到任何静态托管服务。
+
+1.  **构建项目**：
+    ```bash
+    npm run build
+    ```
+2.  将生成的 `build/` (或 `dist/`) 目录上传至服务器。
+3.  如果使用 Vercel，直接连接 GitHub 仓库即可自动部署。
+
+---
+
+## 📖 操作手册
+
+### 1. 界面概览与左侧导航
+
+左侧导航栏采用高级黑配色，图标线条清晰，从上至下依次为：
+
+*   **Logo (羽毛笔)**：点击返回“作品书架”。
+*   **书架 (Library)**：管理所有小说作品。
+*   **创作 (Pen)**：进入核心码字编辑器（当前书籍）。
+*   **大纲 (Layout)**：管理章节目录，拖拽排序，新建/删除章节。
+*   **版本 (History)**：查看当前章节的历史修改记录。
+*   **灵感 (Lightbulb)**：随手记录闪现的灵感碎片（便签功能）。
+*   **检索 (Search)**：AI 辅助资料查询或跳转外部搜索引擎。
+*   **统计 (Chart)**：查看码字速度、日更字数表。
+*   **主题 (Sun/Moon)**：一键切换日/夜间模式。
+*   **小黑屋 (Lock)**：进入强制专注模式。
+*   **设置 (Settings)**：字体、排版及 AI Key 配置。
+
+### 2. 开始写作
+
+1.  在 **书架** 页面点击“新建作品”，输入书名。
+2.  点击封面进入 **创作模式**。
+3.  顶部输入章节名（如“第一章 风起”）。
+4.  在正文区域开始输入。软件会 **每10秒自动保存**（可在设置中调整）。
+5.  点击右上角的 **“智能排版”** 按钮，系统会自动为段首添加两个全角空格，并规范段落间距。
+
+### 3. 使用 AI 助手 (责编建议)
+
+*前提：请先在“设置”中配置 API Key（支持 Gemini, DeepSeek, OpenAI 等）。*
+
+1.  在创作界面右下角，点击 **“责编建议”** 浮窗。
+2.  **自动评估**：首次打开时，AI 会自动读取当前章节内容，给出“剧情复盘”、“文本评估”和“后续走向建议”。
+3.  **对话微调**：您可以在聊天框中输入指令，例如：“帮我给主角设计一个霸气的出场台词”、“这段打斗描写不够精彩，帮我润色一下”。
+4.  **同步大纲**：如果觉得 AI 总结的梗概不错，点击聊天气泡中的“同步梗概”按钮，可直接更新到章节信息中。
+
+### 4. 开启小黑屋 (Focus Mode)
+
+**这是对抗拖延症的终极武器。**
+
+1.  点击左侧导航栏的 **锁形图标**。
+2.  选择锁定类型：
+    *   **按字数**：例如“写完 2000 字才能出来”。注意：只计算进入小黑屋后**新增**的有效字数。
+    *   **按时间**：例如“专注 30 分钟”。
+3.  点击“确认锁定”。
+4.  **状态**：界面将全屏化，屏蔽大部分菜单，顶部显示进度条。只有达到目标字数或倒计时结束，右下角的“解除锁定”按钮才会亮起。
+
+### 5. 数据导出与备份
+
+*   **单章导出**：在“大纲”列表中，鼠标悬停在章节上，点击“下载”图标（导出 .txt）。
+*   **全书导出**：在“书架”页面，点击书籍右下角的“三个点”菜单 -> “全书导出”。
+*   **数据安全**：所有小说内容存储在浏览器的 IndexedDB/LocalStorage 中。**清理浏览器缓存可能会导致数据丢失**，建议定期导出 TXT 备份。
+
+### 6. 常见问题 (FAQ)
+
+*   **Q: 为什么 AI 无法回复？**
+    *   A: 请检查“设置”中的 API Key 是否正确，以及网络是否畅通。如果是使用 Gemini，国内网络可能需要特殊环境。
+*   **Q: 换了浏览器还有数据吗？**
+    *   A: 没有。数据存储在当前浏览器中。请使用导出功能迁移数据。
+*   **Q: 字数统计准确吗？**
+    *   A: 统计排除空格和标点，仅计算有效中文字符和英文单词，更符合网文计费标准。
+
+---
+
+## 🔧 技术栈
+
+*   **Frontend**: React 19
+*   **Styling**: Tailwind CSS
+*   **Icons**: Lucide React
+*   **AI SDK**: Google GenAI SDK (Gemini) / Custom Fetch (DeepSeek/OpenAI)
+*   **Charts**: Recharts
+
+---
+
+**笔纪 Inkflow Studio** - 让文字流淌，让灵感生花。
