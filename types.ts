@@ -10,6 +10,13 @@ export enum ViewMode {
   Settings = 'settings'
 }
 
+export interface AIConfig {
+  provider: 'gemini' | 'deepseek' | 'openai' | 'custom';
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}
+
 export interface AppSettings {
   fontSize: number;
   lineHeight: number;
@@ -17,6 +24,7 @@ export interface AppSettings {
   fontFamily: 'serif' | 'sans';
   autoSaveInterval: number; // seconds
   autoFormatOnSave: boolean;
+  ai: AIConfig;
 }
 
 export interface ChapterVersion {

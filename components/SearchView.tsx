@@ -1,11 +1,86 @@
 
 import React, { useState } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { Search, Loader2, ExternalLink, Sparkles, Globe } from 'lucide-react';
+import { Search, Loader2, ExternalLink, Sparkles, Globe, AlertCircle, RefreshCw } from 'lucide-react';
+import { AppSettings, AIConfig } from '../types';
 
 type SearchEngine = 'ai' | 'google' | 'baidu' | 'bing';
 
-const SearchView: React.FC = () => {
+interface SearchViewProps {
+  settings?: AppSettings;
+}
+
+// Duplicating the robust error extractor for consistency in this component
+const getFriendlyErrorMessage = (error: any): string => {
+  let msg = '';
+  if (error instanceof Error) {
+    msg = error.message;
+  } else if (typeof error === 'object' && error !== null) {
+    msg = error.error?.message || error.message || JSON.stringify(error);
+  } else {
+    msg = String(error);
+  }
+
+  if (typeof msg === 'string' && (msg.trim().startsWith('{') || msg.includes('{"error"'))) {
+     try {
+       const jsonMatch = msg.match(/(\{.*"error".*\})/s) || msg.match(/(\{.*\})/s);
+       const jsonStr = jsonMatch ? jsonMatch[0] : msg;
+       const parsed = JSON.parse(jsonStr);
+       if (parsed.error?.message) msg = parsed.error.message;
+       else if (parsed.message) msg = parsed.message;
+     } catch (e) {}
+  }
+
+  if (msg.includes('Insufficient Balance')) {
+      return 'API 余额不足 (Insufficient Balance)。请检查您的 API Key 账户额度或充值。';
+  }
+  if (msg.includes('Rpc failed') || msg.includes('xhr error') || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+      return "网络连接受阻 (XHR/RPC Error)。\n请检查：\n1. 网络是否能访问 AI 服务端点\n2. API Key 是否正确\n3. 浏览器插件是否拦截了请求";
+  }
+  
+  return msg;
+};
+
+const fetchOpenAICompatible = async (config: AIConfig, messages: any[]) => {
+  if (!config.apiKey) throw new Error("请在设置中配置 API Key");
+  
+  let baseUrl = config.baseUrl.trim().replace(/\/+$/, '');
+  if (baseUrl.endsWith('/chat/completions')) {
+    baseUrl = baseUrl.substring(0, baseUrl.length - '/chat/completions'.length);
+  }
+
+  const payload: any = {
+    model: config.model,
+    messages: messages
+  };
+
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      // Throw raw text to be parsed by friendly error handler
+      throw new Error(errorText || `请求失败 (${response.status})`);
+    }
+
+    const data = await response.json();
+    if (!data.choices || data.choices.length === 0) {
+       throw new Error("API 返回内容为空。");
+    }
+    return data.choices[0]?.message?.content || "未收到回复";
+  } catch (e: any) {
+    throw e;
+  }
+};
+
+const SearchView: React.FC<SearchViewProps> = ({ settings }) => {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [engine, setEngine] = useState<SearchEngine>('ai');
@@ -24,23 +99,56 @@ const SearchView: React.FC = () => {
     if (engine === 'ai') {
       setLoading(true);
       setResult(null);
-      try {
-        // Always use process.env.API_KEY directly when initializing the @google/genai client instance
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: `作为一个小说资料检索助手，请针对以下主题提供详尽的创作背景资料、历史知识或器物设定：${query}`,
-          config: {
-            tools: [{ googleSearch: {} }],
-          },
-        });
+      
+      const aiConfig: AIConfig = settings?.ai || { provider: 'gemini', apiKey: '', baseUrl: '', model: '' };
 
-        const text = response.text || "未能获取检索结果。";
-        const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-        setResult({ text, sources });
-      } catch (err) {
-        console.error(err);
-        setResult({ text: "AI 检索遇到了一些困难，请检查网络或稍后再试。", sources: [] });
+      try {
+        if (aiConfig.provider === 'gemini') {
+          const key = aiConfig.apiKey || process.env.API_KEY;
+          if (!key) throw new Error("未配置 Gemini API Key");
+
+          const ai = new GoogleGenAI({ apiKey: key });
+          
+          try {
+            // 尝试 1: 启用 Google 搜索增强 (grounding)
+            const response = await ai.models.generateContent({
+              model: aiConfig.model || "gemini-3-flash-preview",
+              contents: `作为一个小说资料检索助手，请针对以下主题提供详尽的创作背景资料、历史知识或器物设定：${query}`,
+              config: {
+                tools: [{ googleSearch: {} }],
+              },
+            });
+
+            const text = response.text || "未能获取检索结果。";
+            const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+            setResult({ text, sources });
+
+          } catch (toolError: any) {
+            console.warn("Search grounding failed, attempting fallback...", toolError);
+            
+            // 如果是 RPC/Network 错误，Fallback 往往也会失败，但我们还是尝试一次无 Tools 的纯文本生成
+            // 尝试 2: 降级为纯 LLM 生成 (不使用 tools)
+            const fallbackResponse = await ai.models.generateContent({
+              model: aiConfig.model || "gemini-3-flash-preview",
+              contents: `作为一个小说资料检索助手，请针对以下主题提供详尽的创作背景资料、历史知识或器物设定：${query}\n\n(注意：由于联网检索暂时不可用，请基于你内置的知识库进行详细解答)`,
+              // 移除 config.tools
+            });
+
+            const text = (fallbackResponse.text || "未能获取结果。") + "\n\n----------\n(注：因网络原因实时检索暂不可用，以上内容基于 AI 内置知识库生成)";
+            setResult({ text, sources: [] });
+          }
+
+        } else {
+          // Custom Provider (DeepSeek/OpenAI) 
+          const text = await fetchOpenAICompatible(aiConfig, [
+            { role: 'user', content: `作为一个小说资料检索助手，请针对以下主题提供详尽的创作背景资料、历史知识或器物设定：${query}` }
+          ]);
+          setResult({ text, sources: [] });
+        }
+      } catch (err: any) {
+        console.error("Final search error:", err);
+        const friendlyMsg = getFriendlyErrorMessage(err);
+        setResult({ text: `检索遇到困难: ${friendlyMsg}`, sources: [] });
       } finally {
         setLoading(false);
       }
@@ -65,7 +173,6 @@ const SearchView: React.FC = () => {
             key={eng.id}
             onClick={() => setEngine(eng.id)}
             className={`flex-1 flex items-center justify-center space-x-1 py-2 rounded-lg text-[10px] font-bold transition-all ${
-              // Fix: Changed eng.eng.id to eng.id to resolve Property 'eng' does not exist error
               engine === eng.id 
               ? `bg-white shadow-sm ${eng.color}` 
               : 'text-gray-400 hover:text-gray-600'
@@ -98,6 +205,17 @@ const SearchView: React.FC = () => {
       </div>
 
       <div className="flex-grow overflow-y-auto custom-scrollbar">
+        {engine !== 'ai' && (
+           <div className="mb-4 p-3 bg-blue-50 text-blue-800 rounded-xl text-xs flex items-start border border-blue-100">
+              <AlertCircle size={14} className="mr-2 mt-0.5 shrink-0" />
+              <div>
+                受限于浏览器安全策略 (X-Frame-Options)，外部搜索引擎无法直接内嵌显示。我们将在新窗口中为您打开搜索结果。
+                <br/>
+                <span className="opacity-70 text-[10px] mt-1 block">推荐使用 "AI智能" 模式获取沉浸式体验。</span>
+              </div>
+           </div>
+        )}
+
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400 animate-in fade-in zoom-in duration-300">
             <div className="relative mb-6">
@@ -108,10 +226,10 @@ const SearchView: React.FC = () => {
           </div>
         ) : result ? (
           <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-amber-50/50 p-5 rounded-2xl border border-amber-100 shadow-sm">
-              <h3 className="text-xs font-black text-amber-600 uppercase mb-4 flex items-center tracking-widest">
-                <Sparkles size={14} className="mr-2" />
-                智能检索分析
+            <div className={`p-5 rounded-2xl border shadow-sm ${result.text.includes('失败') || result.text.includes('困难') ? 'bg-red-50 border-red-100' : 'bg-amber-50/50 border-amber-100'}`}>
+              <h3 className={`text-xs font-black uppercase mb-4 flex items-center tracking-widest ${result.text.includes('失败') || result.text.includes('困难') ? 'text-red-600' : 'text-amber-600'}`}>
+                {result.text.includes('失败') || result.text.includes('困难') ? <AlertCircle size={14} className="mr-2" /> : <Sparkles size={14} className="mr-2" />}
+                {result.text.includes('失败') || result.text.includes('困难') ? '检索受阻' : '智能检索分析'}
               </h3>
               <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap serif">
                 {result.text}

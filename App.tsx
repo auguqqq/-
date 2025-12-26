@@ -19,7 +19,10 @@ import {
   Upload,
   Sun,
   Moon,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles,
+  FileOutput,
+  Feather
 } from 'lucide-react';
 import Editor from './components/Editor';
 import Bookshelf from './components/Bookshelf';
@@ -42,16 +45,64 @@ const countActualChars = (text: string): number => {
 
 const getTodayKey = () => new Date().toISOString().split('T')[0];
 
+const NavButton = ({ 
+  icon: Icon, 
+  label, 
+  isActive, 
+  onClick, 
+  disabled = false,
+  activeColor = 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
+}: { icon: any, label: string, isActive?: boolean, onClick: () => void, disabled?: boolean, activeColor?: string }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`
+      relative group flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-300
+      ${disabled ? 'opacity-20 cursor-not-allowed' : 'cursor-pointer'}
+      ${isActive 
+        ? activeColor 
+        : 'text-gray-400 hover:bg-white/10 hover:text-white'
+      }
+    `}
+  >
+    <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+    
+    {/* Tooltip */}
+    <span className="absolute left-14 bg-gray-900 text-white text-xs font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none tracking-wider shadow-xl border border-white/10 translate-x-[-10px] group-hover:translate-x-0 duration-200">
+      {label}
+    </span>
+  </button>
+);
+
 const App: React.FC = () => {
   const [appSettings, setAppSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_settings`);
-    return saved ? JSON.parse(saved) : {
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // Ensure ai config exists for migrated data
+      if (!parsed.ai) {
+        parsed.ai = {
+          provider: 'gemini',
+          apiKey: '',
+          baseUrl: '',
+          model: 'gemini-2.0-flash'
+        };
+      }
+      return parsed;
+    }
+    return {
       fontSize: 20,
       lineHeight: 1.8,
       theme: 'cream',
       fontFamily: 'serif',
       autoSaveInterval: 10,
-      autoFormatOnSave: false
+      autoFormatOnSave: false,
+      ai: {
+        provider: 'gemini',
+        apiKey: '',
+        baseUrl: '',
+        model: 'gemini-2.0-flash'
+      }
     };
   });
 
@@ -98,15 +149,23 @@ const App: React.FC = () => {
   });
   
   const [stats, setStats] = useState<WritingStats>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_stats`);
-    if (saved) return JSON.parse(saved);
-    return {
+    const defaultStats = {
       dailyCount: 0,
       weeklyCount: [0, 0, 0, 0, 0, 0, 0],
       speed: 0,
       startTime: Date.now(),
       writingHistory: {}
     };
+    const saved = localStorage.getItem(`${STORAGE_KEY}_stats`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...defaultStats, ...parsed, writingHistory: parsed.writingHistory || {} };
+      } catch (e) {
+        return defaultStats;
+      }
+    }
+    return defaultStats;
   });
 
   const currentBook = useMemo(() => books.find(b => b.id === currentBookId) || books[0], [books, currentBookId]);
@@ -174,7 +233,6 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [books, currentBookId, inspirations, appSettings, stats, isDirty, createSnapshot]);
 
-  // Track the previous character count locally to compute diff
   const lastCharCountRef = useRef(currentChapterChars);
   useEffect(() => {
     lastCharCountRef.current = currentChapterChars;
@@ -190,7 +248,7 @@ const App: React.FC = () => {
         ...prev,
         writingHistory: {
           ...prev.writingHistory,
-          [today]: (prev.writingHistory[today] || 0) + diff
+          [today]: (prev.writingHistory?.[today] || 0) + diff
         }
       }));
     }
@@ -308,6 +366,17 @@ const App: React.FC = () => {
     } : b));
   }, [currentBookId]);
 
+  const handleExportCurrentChapter = () => {
+    const text = `${currentChapter.title}\n\n${currentChapter.content}`;
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${currentChapter.title}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const startBlackHouse = (config: Partial<BlackHouseConfig>) => {
     const currentTotal = countActualChars(currentChapter.content);
     setBlackHouse({
@@ -341,6 +410,14 @@ const App: React.FC = () => {
   };
 
   const toggleRightSidebar = (mode: ViewMode) => {
+    // If we are not in editor mode (e.g. Bookshelf or Settings), switch to Editor first
+    if (viewMode !== ViewMode.Editor) {
+      setViewMode(ViewMode.Editor);
+      setRightSidebarMode(mode);
+      setSidebarOpen(true);
+      return;
+    }
+
     if (!sidebarOpen) {
       setRightSidebarMode(mode);
       setSidebarOpen(true);
@@ -356,26 +433,90 @@ const App: React.FC = () => {
 
   return (
     <div className={`flex h-screen w-screen transition-colors duration-1000 overflow-hidden font-sans ${themeClasses[effectiveTheme]}`}>
-      <nav className={`w-16 flex flex-col items-center py-6 space-y-6 text-gray-400 z-50 shrink-0 transition-all duration-500 ease-in-out ${blackHouse.active ? 'bg-black/95 shadow-2xl' : 'bg-[#2c3e50]'}`}>
-        <div className="text-white mb-2 cursor-pointer" onClick={() => setViewMode(ViewMode.Bookshelf)}><BookOpen size={28} /></div>
-        <button onClick={() => !blackHouse.active && setViewMode(ViewMode.Bookshelf)} disabled={blackHouse.active} className={`p-2.5 rounded-xl transition-all ${viewMode === ViewMode.Bookshelf ? 'bg-white/10 text-white shadow-inner' : 'hover:text-white'} ${blackHouse.active ? 'opacity-20' : ''}`} title="作品库"><Library size={22} /></button>
-        <div className="w-8 h-px bg-white/10" />
-        <button onClick={() => setViewMode(ViewMode.Editor)} className={`p-2.5 rounded-xl transition-all ${viewMode === ViewMode.Editor ? 'bg-white/10 text-white shadow-inner' : 'hover:text-white'}`} title="码字"><Type size={22} /></button>
-        <button onClick={() => toggleRightSidebar(ViewMode.Outline)} className={`p-2.5 rounded-xl transition-all ${sidebarOpen && rightSidebarMode === ViewMode.Outline ? 'bg-white/10 text-white' : 'hover:text-white'}`} title="目录"><Layout size={22} /></button>
-        <button onClick={() => toggleRightSidebar(ViewMode.History)} className={`p-2.5 rounded-xl transition-all ${sidebarOpen && rightSidebarMode === ViewMode.History ? 'bg-white/10 text-white' : 'hover:text-white'}`} title="历史"><HistoryIcon size={22} /></button>
-        <button onClick={() => toggleRightSidebar(ViewMode.Inspiration)} className={`p-2.5 rounded-xl transition-all ${sidebarOpen && rightSidebarMode === ViewMode.Inspiration ? 'bg-white/10 text-white' : 'hover:text-white'}`} title="灵感"><Lightbulb size={22} /></button>
-        <button onClick={() => toggleRightSidebar(ViewMode.Statistics)} className={`p-2.5 rounded-xl transition-all ${sidebarOpen && rightSidebarMode === ViewMode.Statistics ? 'bg-white/10 text-white' : 'hover:text-white'}`} title="统计"><BarChart2 size={22} /></button>
-        <button onClick={() => toggleRightSidebar(ViewMode.Search)} className={`p-2.5 rounded-xl transition-all ${sidebarOpen && rightSidebarMode === ViewMode.Search ? 'bg-white/10 text-white' : 'hover:text-white'}`} title="检索"><Search size={22} /></button>
+      {/* Optimized Sidebar */}
+      <nav className={`w-20 flex flex-col items-center py-8 space-y-4 z-50 shrink-0 transition-all duration-500 ease-in-out border-r border-white/5 ${blackHouse.active ? 'bg-black/95' : 'bg-[#1e293b]'}`}>
+        
+        {/* Brand / Home Group */}
+        <div className="flex flex-col items-center space-y-2 mb-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20 mb-2 cursor-pointer" onClick={() => setViewMode(ViewMode.Bookshelf)}>
+               <Feather className="text-white" size={20} />
+            </div>
+            <NavButton 
+              icon={Library} 
+              label="作品书架" 
+              isActive={viewMode === ViewMode.Bookshelf} 
+              onClick={() => !blackHouse.active && setViewMode(ViewMode.Bookshelf)} 
+              disabled={blackHouse.active}
+            />
+        </div>
+
+        <div className="w-8 h-px bg-white/10 my-2" />
+
+        {/* Writing Tools Group */}
+        <div className="flex flex-col items-center space-y-3">
+          <NavButton 
+              icon={Type} 
+              label="码字模式" 
+              isActive={viewMode === ViewMode.Editor && !sidebarOpen} 
+              onClick={() => { setViewMode(ViewMode.Editor); setSidebarOpen(false); }} 
+          />
+          <NavButton 
+              icon={Layout} 
+              label="章节大纲" 
+              isActive={viewMode === ViewMode.Editor && sidebarOpen && rightSidebarMode === ViewMode.Outline} 
+              onClick={() => toggleRightSidebar(ViewMode.Outline)} 
+          />
+          <NavButton 
+              icon={HistoryIcon} 
+              label="历史版本" 
+              isActive={viewMode === ViewMode.Editor && sidebarOpen && rightSidebarMode === ViewMode.History} 
+              onClick={() => toggleRightSidebar(ViewMode.History)} 
+          />
+          <NavButton 
+              icon={Lightbulb} 
+              label="灵感便签" 
+              isActive={viewMode === ViewMode.Editor && sidebarOpen && rightSidebarMode === ViewMode.Inspiration} 
+              onClick={() => toggleRightSidebar(ViewMode.Inspiration)} 
+          />
+          <NavButton 
+              icon={Search} 
+              label="资料检索" 
+              isActive={viewMode === ViewMode.Editor && sidebarOpen && rightSidebarMode === ViewMode.Search} 
+              onClick={() => toggleRightSidebar(ViewMode.Search)} 
+          />
+          <NavButton 
+              icon={BarChart2} 
+              label="数据统计" 
+              isActive={viewMode === ViewMode.Editor && sidebarOpen && rightSidebarMode === ViewMode.Statistics} 
+              onClick={() => toggleRightSidebar(ViewMode.Statistics)} 
+          />
+        </div>
+
         <div className="flex-grow" />
-        <button onClick={() => setAppSettings(p => ({ ...p, theme: effectiveTheme === 'dark' ? 'cream' : 'dark' }))} className="p-2.5 rounded-xl hover:text-white transition-all">
-          {effectiveTheme === 'dark' ? <Sun size={22} /> : <Moon size={22} />}
-        </button>
-        <button onClick={() => blackHouse.active ? null : setIsSettingUpBlackHouse(true)} className={`p-2.5 rounded-xl transition-all ${blackHouse.active ? 'text-amber-500 bg-amber-50/10' : 'hover:text-white'}`}>
-          {blackHouse.active ? <Lock size={22} className="animate-pulse" /> : <Unlock size={22} />}
-        </button>
-        <button onClick={() => !blackHouse.active && setViewMode(ViewMode.Settings)} disabled={blackHouse.active} className={`p-2.5 rounded-xl transition-all ${viewMode === ViewMode.Settings ? 'bg-white/10 text-white shadow-inner' : 'hover:text-white'} ${blackHouse.active ? 'opacity-20' : ''}`}>
-          <SettingsIcon size={22} />
-        </button>
+
+        {/* System Group */}
+        <div className="flex flex-col items-center space-y-3 pb-2">
+           <NavButton 
+              icon={effectiveTheme === 'dark' ? Sun : Moon} 
+              label="切换主题" 
+              onClick={() => setAppSettings(p => ({ ...p, theme: effectiveTheme === 'dark' ? 'cream' : 'dark' }))} 
+              activeColor="text-white bg-white/20"
+           />
+           <NavButton 
+              icon={blackHouse.active ? Lock : Unlock} 
+              label={blackHouse.active ? "专注进行中" : "进入小黑屋"} 
+              isActive={blackHouse.active} 
+              onClick={() => blackHouse.active ? null : setIsSettingUpBlackHouse(true)}
+              activeColor="bg-red-500 text-white shadow-lg shadow-red-500/30"
+           />
+           <NavButton 
+              icon={SettingsIcon} 
+              label="系统设置" 
+              isActive={viewMode === ViewMode.Settings} 
+              onClick={() => !blackHouse.active && setViewMode(ViewMode.Settings)} 
+              disabled={blackHouse.active}
+           />
+        </div>
       </nav>
 
       <main className="flex-grow flex flex-col relative overflow-hidden">
@@ -402,6 +543,9 @@ const App: React.FC = () => {
                 <span>自动保存: {new Date(lastSaved).toLocaleTimeString([], { hour12: false })}</span>
                 {isDirty && <div className="w-1.5 h-1.5 bg-amber-500 rounded-full ml-2 animate-pulse" title="有未保存的更改" />}
              </div>
+             
+             <div className="h-4 w-px bg-gray-300/50" />
+
              <button onClick={handleFormat} className="px-4 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-all shadow-sm active:scale-95">智能排版</button>
           </div>
         </header>
@@ -422,6 +566,7 @@ const App: React.FC = () => {
                 setNextChapterSynopsis={setNextChapterSynopsis}
                 onFinishBook={handleFinishBook}
                 onAddNextChapter={addNextChapterAndNavigate}
+                onExport={handleExportCurrentChapter}
                 focusMode={blackHouse.active}
                 settings={appSettings}
                 blackHouse={blackHouse}
@@ -445,10 +590,10 @@ const App: React.FC = () => {
               {rightSidebarMode === ViewMode.History && <VersionHistory versions={currentChapter.versions || []} onRevert={(v) => { createSnapshot(); setBooks(prev => prev.map(b => b.id === currentBookId ? { ...b, chapters: b.chapters.map(c => c.id === b.currentChapterId ? { ...c, content: v.content, title: v.title } : c) } : b)); }} />}
               {rightSidebarMode === ViewMode.Statistics && <Statistics stats={{...stats, dailyCount: stats.writingHistory[getTodayKey()] || 0}} />}
               {rightSidebarMode === ViewMode.Inspiration && <InspirationView items={inspirations} setItems={setInspirations} />}
-              {rightSidebarMode === ViewMode.Search && <SearchView />}
+              {rightSidebarMode === ViewMode.Search && <SearchView settings={appSettings} />}
             </div>
           </aside>
-          {!sidebarOpen && (
+          {!sidebarOpen && viewMode === ViewMode.Editor && (
              <button onClick={() => setSidebarOpen(true)} className={`absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-l-2xl shadow-xl z-10 border transition-all ${effectiveTheme === 'dark' ? 'bg-[#1a1a1a] border-white/10 text-gray-400' : 'bg-white border-gray-200 text-gray-500'}`}><ChevronLeft size={20} /></button>
           )}
         </div>

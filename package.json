@@ -1,5 +1,5 @@
 {
-  "name": "copy-of-笔纪-(inkflow-studio)",
+  "name": "笔纪-(inkflow-studio)",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,10 +10,10 @@
   },
   "dependencies": {
     "react": "^19.2.3",
-    "lucide-react": "0.460.0",
-    "@google/genai": "1.3.0",
-    "recharts": "2.13.0",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "lucide-react": "^0.562.0",
+    "@google/genai": "^1.34.0",
+    "recharts": "^3.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

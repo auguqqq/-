@@ -1,5 +1,5 @@
 {
-  "name": "Copy of 笔纪 (Inkflow Studio)",
+  "name": "笔纪 (Inkflow Studio)",
   "description": "A professional Chinese writing assistant featuring automated formatting, incremental focus mode, and AI plotting helpers.",
   "requestFramePermissions": [
     "geolocation"

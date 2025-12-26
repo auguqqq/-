@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Plus, GripVertical, Trash2 } from 'lucide-react';
+import { Plus, GripVertical, Trash2, Download } from 'lucide-react';
 import { Chapter, Book } from '../types';
 
 interface OutlineProps {
@@ -47,6 +47,18 @@ const Outline: React.FC<OutlineProps> = ({ chapters, currentChapterId, onSelectC
       }
       return b;
     }));
+  };
+
+  const exportChapter = (e: React.MouseEvent, chapter: Chapter) => {
+    e.stopPropagation();
+    const text = `${chapter.title}\n\n${chapter.content}`;
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${chapter.title}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
@@ -132,12 +144,23 @@ const Outline: React.FC<OutlineProps> = ({ chapters, currentChapterId, onSelectC
               </span>
             </div>
 
-            <button 
-              onClick={(e) => removeChapter(e, chapter.id)}
-              className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all"
-            >
-              <Trash2 size={14} />
-            </button>
+            <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button 
+                onClick={(e) => exportChapter(e, chapter)}
+                className="p-1.5 text-gray-300 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-all"
+                title="导出单章TXT"
+                >
+                <Download size={14} />
+                </button>
+                
+                <button 
+                onClick={(e) => removeChapter(e, chapter.id)}
+                className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all"
+                title="删除章节"
+                >
+                <Trash2 size={14} />
+                </button>
+            </div>
 
             {currentChapterId === chapter.id && (
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500" />
