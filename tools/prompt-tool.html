@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>笔纪 Prompt 加密/解密工具</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f5f5f7;
+            color: #1d1d1f;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+        .group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #86868b;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 15px;
+            border: 1px solid #d2d2d7;
+            border-radius: 12px;
+            font-family: monospace;
+            font-size: 14px;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #0071e3;
+            box-shadow: 0 0 0 4px rgba(0,113,227,0.1);
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 30px 0;
+        }
+        button {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 99px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background-color: #0071e3;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #0077ed;
+            transform: scale(1.02);
+        }
+        .btn-secondary {
+            background-color: #e8e8ed;
+            color: #1d1d1f;
+        }
+        .btn-secondary:hover {
+            background-color: #d2d2d7;
+        }
+        .copy-hint {
+            text-align: center;
+            color: #0071e3;
+            font-size: 14px;
+            height: 20px;
+            margin-top: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .copy-hint.visible {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Prompt 加密/解密工具</h1>
+        
+        <div class="group">
+            <label>明文 (Plain Text)</label>
+            <textarea id="plain" placeholder="输入要加密的 Prompt..."></textarea>
+        </div>
+
+        <div class="buttons">
+            <button class="btn-primary" onclick="doEncrypt()">⬇️ 加密 (Encrypt)</button>
+            <button class="btn-secondary" onclick="doDecrypt()">⬆️ 解密 (Decrypt)</button>
+        </div>
+
+        <div class="group">
+            <label>密文 (Encrypted String)</label>
+            <textarea id="cipher" placeholder="输入要解密的乱码..."></textarea>
+        </div>
+        
+        <div class="buttons">
+             <button class="btn-secondary" onclick="copyResult()">复制结果 (Copy)</button>
+        </div>
+        <div id="toast" class="copy-hint">已复制到剪贴板</div>
+    </div>
+
+    <script>
+        // 加密逻辑：UTF-8 -> Base64 -> Reverse
+        function encode(s) {
+            try {
+                return btoa(unescape(encodeURIComponent(s))).split('').reverse().join('');
+            } catch (e) {
+                alert('加密失败，请检查输入内容');
+                return '';
+            }
+        }
+
+        // 解密逻辑：Reverse -> Base64 -> UTF-8
+        function decode(s) {
+            try {
+                return decodeURIComponent(escape(atob(s.split('').reverse().join(''))));
+            } catch (e) {
+                alert('解密失败，密文格式可能不正确');
+                return '';
+            }
+        }
+
+        function doEncrypt() {
+            const input = document.getElementById('plain').value;
+            if (!input) return;
+            const output = encode(input);
+            document.getElementById('cipher').value = output;
+        }
+
+        function doDecrypt() {
+            const input = document.getElementById('cipher').value;
+            if (!input) return;
+            const output = decode(input);
+            document.getElementById('plain').value = output;
+        }
+
+        function copyResult() {
+            const cipher = document.getElementById('cipher');
+            const plain = document.getElementById('plain');
+            
+            // 优先复制有焦点的，或者最近操作的输出
+            let textToCopy = cipher.value;
+            if (document.activeElement === plain && plain.value) {
+                textToCopy = plain.value;
+            } else if (!textToCopy && plain.value) {
+                textToCopy = plain.value;
+            }
+
+            if (textToCopy) {
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    const toast = document.getElementById('toast');
+                    toast.classList.add('visible');
+                    setTimeout(() => toast.classList.remove('visible'), 2000);
+                });
+            }
+        }
+    </script>
+</body>
+</html>

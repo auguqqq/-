@@ -1,0 +1,7 @@
+{
+  "name": "笔纪 Inkflow Studio v2.0.0",
+  "description": "A professional Chinese writing assistant featuring automated formatting, incremental focus mode, and AI plotting helpers.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
