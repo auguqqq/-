@@ -4,6 +4,7 @@ import { GoogleGenAI } from "@google/genai";
 import { Search, Loader2, ExternalLink, Sparkles, AlertCircle, Bot, Globe, History, Clock } from 'lucide-react';
 import { AppSettings, AIConfig, SearchState, Book } from '../types';
 import { getSearchSystemPrompt } from '../utils/ai-prompts';
+import { withRetry, fetchOpenAICompatible, getFriendlyErrorMessage } from '../utils/api';
 import ReactMarkdown from 'react-markdown';
 
 interface SearchViewProps {
@@ -13,96 +14,6 @@ interface SearchViewProps {
   searchHistory?: string[];
   onUpdateBook?: (field: keyof Book, value: any) => void;
 }
-
-// Retry Helper
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> {
-  try {
-    return await fn();
-  } catch (error: any) {
-    const isRateLimit = 
-        error.status === 429 || 
-        error.code === 429 || 
-        (error.message && (error.message.includes('429') || error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED')));
-    
-    if (retries > 0 && isRateLimit) {
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return withRetry(fn, retries - 1, delay * 2);
-    }
-    throw error;
-  }
-}
-
-// Helper for OpenAI compatible API calls
-const fetchOpenAICompatible = async (config: AIConfig, messages: any[]) => {
-  let baseUrl = config.baseUrl.trim().replace(/\/+$/, '');
-  if (baseUrl.endsWith('/chat/completions')) {
-    baseUrl = baseUrl.substring(0, baseUrl.length - '/chat/completions'.length);
-  }
-
-  const payload: any = {
-    model: config.model || 'gpt-3.5-turbo',
-    messages: messages
-  };
-
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok) {
-      const errorText = await response.text();
-      if (response.status === 429) throw { status: 429, message: errorText };
-      throw new Error(`请求失败 (${response.status}): ${errorText}`);
-  }
-  const data = await response.json();
-  return data.choices[0]?.message?.content || "";
-};
-
-const getFriendlyErrorMessage = (error: any): string => {
-  if (error?.status === 429 || error?.code === 429 || error?.error?.code === 429) {
-      return 'API 配额已耗尽 (429)。请稍后再试。';
-  }
-
-  let msg = '';
-  if (error instanceof Error) {
-    msg = error.message;
-  } else if (typeof error === 'object' && error !== null) {
-    msg = error.error?.message || error.message || JSON.stringify(error);
-  } else {
-    msg = String(error);
-  }
-
-  if (typeof msg === 'string' && (msg.trim().startsWith('{') || msg.includes('{"error"'))) {
-     try {
-       const jsonMatch = msg.match(/(\{.*"error".*\})/s) || msg.match(/(\{.*\})/s);
-       const jsonStr = jsonMatch ? jsonMatch[0] : msg;
-       const parsed = JSON.parse(jsonStr);
-       if (parsed.error?.code === 429 || parsed.status === "RESOURCE_EXHAUSTED") {
-           return 'API 配额已耗尽 (429)。请稍后再试。';
-       }
-       if (parsed.error?.message) msg = parsed.error.message;
-       else if (parsed.message) msg = parsed.message;
-     } catch (e) {}
-  }
-
-  if (msg.includes('404') || msg.includes('NOT_FOUND')) {
-      return "模型未找到 (404)。请在“设置”中检查您的模型名称是否正确。";
-  }
-  
-  if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
-      return 'API 配额已耗尽 (429)。请稍后再试。';
-  }
-
-  if (msg.includes('Rpc failed') || msg.includes('xhr error') || msg.includes('Failed to fetch')) {
-      return "网络连接失败。请检查网络。";
-  }
-  
-  return msg;
-};
 
 const ExternalSearchButton: React.FC<{ name: string; urlTemplate: string; query: string; color: string }> = ({ name, urlTemplate, query, color }) => (
     <button 

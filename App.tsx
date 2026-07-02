@@ -45,6 +45,7 @@ import PaymentModal from './components/PaymentModal';
 import OnboardingTour, { TourStep } from './components/OnboardingTour';
 import WelcomeScreen from './components/WelcomeScreen'; 
 import { ViewMode, WritingStats, Book, Chapter, Inspiration, BlackHouseConfig, ChapterVersion, AppSettings, ChatMessage, SearchState } from './types';
+import { countActualChars, getTodayKey } from './utils/helpers';
 
 const STORAGE_KEY = 'inkflow_studio_v7';
 const GLOBAL_TOUR_KEY = 'inkflow_tour_global_v11_soul'; 
@@ -71,14 +72,6 @@ const GLOBAL_STEPS: TourStep[] = [
     placement: 'bottom'
   }
 ];
-
-const countActualChars = (text: string): number => {
-  if (!text) return 0;
-  const matches = text.match(/[\u4e00-\u9fa5a-zA-Z0-9]/g);
-  return matches ? matches.length : 0;
-};
-
-const getTodayKey = () => new Date().toISOString().split('T')[0];
 
 const NavButton = ({ 
   icon: Icon, 
@@ -420,16 +413,20 @@ const App: React.FC = () => {
     if (!isComposing) {
       const newCount = countActualChars(text);
       const diff = newCount - lastCharCountRef.current;
-      
+
       if (diff > 0) {
         const today = getTodayKey();
-        setStats(prev => ({
-          ...prev,
-          writingHistory: {
-            ...prev.writingHistory,
-            [today]: (prev.writingHistory?.[today] || 0) + diff
+        setStats(prev => {
+          // 保留最近 365 天的写作记录，防止无限增长
+          const newHistory = { ...prev.writingHistory, [today]: (prev.writingHistory?.[today] || 0) + diff };
+          const keys = Object.keys(newHistory);
+          if (keys.length > 400) {
+            const sorted = keys.sort();
+            const cutoff = sorted.length - 365;
+            for (let i = 0; i < cutoff; i++) delete newHistory[sorted[i]];
           }
-        }));
+          return { ...prev, writingHistory: newHistory };
+        });
       }
       
       lastCharCountRef.current = newCount;
@@ -458,6 +455,55 @@ const App: React.FC = () => {
         };
       }
       return b;
+    }));
+    setIsDirty(true);
+  };
+
+  const addChapterFromOutline = () => {
+    if (!currentBook) return;
+
+    const newId = `chapter-${Date.now()}`;
+    const newChapter: Chapter = {
+      id: newId,
+      title: currentBook.type === 'anthology' ? '新篇章' : `第 ${currentBook.chapters.length + 1} 章`,
+      content: '',
+      synopsis: '',
+      lastModified: Date.now()
+    };
+
+    setBooks(prev => prev.map(book => (
+      book.id === currentBookId
+        ? { ...book, chapters: [...book.chapters, newChapter], currentChapterId: newId }
+        : book
+    )));
+    setIsDirty(true);
+  };
+
+  const removeChapterFromOutline = (chapterId: string) => {
+    setBooks(prev => prev.map(book => {
+      if (book.id !== currentBookId || book.chapters.length <= 1) return book;
+
+      const remaining = book.chapters.filter(chapter => chapter.id !== chapterId);
+      return {
+        ...book,
+        chapters: remaining,
+        currentChapterId: chapterId === book.currentChapterId
+          ? remaining[0].id
+          : book.currentChapterId
+      };
+    }));
+    setIsDirty(true);
+  };
+
+  const reorderChaptersFromOutline = (sourceIndex: number, targetIndex: number) => {
+    setBooks(prev => prev.map(book => {
+      if (book.id !== currentBookId) return book;
+
+      const chapters = [...book.chapters];
+      const [movedChapter] = chapters.splice(sourceIndex, 1);
+      if (!movedChapter) return book;
+      chapters.splice(targetIndex, 0, movedChapter);
+      return { ...book, chapters };
     }));
     setIsDirty(true);
   };
@@ -494,8 +540,11 @@ const App: React.FC = () => {
   };
 
   const updateCurrentBookField = (field: keyof Book, value: any) => {
-      setBooks(prev => prev.map(b => b.id === currentBookId ? { ...b, [field]: value } : b));
-      setIsDirty(true); 
+      // 对话记录上限 80 条，超了自动丢弃最早的
+      const finalValue = field === 'aiChatLogs' && Array.isArray(value) && value.length > 80
+        ? value.slice(value.length - 80) : value;
+      setBooks(prev => prev.map(b => b.id === currentBookId ? { ...b, [field]: finalValue } : b));
+      setIsDirty(true);
   };
 
   const handleFinishBook = () => {
@@ -1038,9 +1087,11 @@ const App: React.FC = () => {
                     <Outline 
                         chapters={currentBook.chapters} 
                         currentChapterId={currentBook.currentChapterId} 
-                        onSelectChapter={navigateToChapter} 
-                        setBooks={setBooks} 
-                        bookId={currentBookId} 
+                        onSelectChapter={navigateToChapter}
+                        onAddChapter={addChapterFromOutline}
+                        onRemoveChapter={removeChapterFromOutline}
+                        onUpdateChapter={updateChapter}
+                        onReorderChapters={reorderChaptersFromOutline}
                         settings={appSettings}
                         bookSummary={currentBook.bookSummary || ''}
                         onUpdateSummary={(s) => updateCurrentBookField('bookSummary', s)}

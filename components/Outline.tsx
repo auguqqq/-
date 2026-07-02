@@ -2,68 +2,37 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, GripVertical, Trash2, Download, FileText, Sparkles, Loader2, Info } from 'lucide-react';
-import { Chapter, Book, AppSettings, AIConfig } from '../types';
+import { Chapter, AppSettings } from '../types';
 import { GoogleGenAI } from "@google/genai";
+import { withRetry, fetchOpenAICompatible } from '../utils/api';
 
 interface OutlineProps {
   chapters: Chapter[];
   currentChapterId: string;
   onSelectChapter: (id: string) => void;
-  setBooks: React.Dispatch<React.SetStateAction<Book[]>>;
-  bookId: string;
+  onAddChapter: () => void;
+  onRemoveChapter: (id: string) => void;
+  onUpdateChapter: (id: string, data: Partial<Pick<Chapter, 'title' | 'synopsis'>>) => void;
+  onReorderChapters: (sourceIndex: number, targetIndex: number) => void;
   settings: AppSettings;
   bookSummary: string;
   onUpdateSummary: (summary: string) => void;
   isAnthology?: boolean;
 }
 
-// Retry Helper
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> {
-  try {
-    return await fn();
-  } catch (error: any) {
-    const isRateLimit = 
-        error.status === 429 || 
-        error.code === 429 || 
-        (error.message && (error.message.includes('429') || error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED')));
-    
-    if (retries > 0 && isRateLimit) {
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return withRetry(fn, retries - 1, delay * 2);
-    }
-    throw error;
-  }
-}
-
-const fetchOpenAICompatible = async (config: AIConfig, messages: any[]) => {
-  let baseUrl = config.baseUrl.trim().replace(/\/+$/, '');
-  if (baseUrl.endsWith('/chat/completions')) {
-    baseUrl = baseUrl.substring(0, baseUrl.length - '/chat/completions'.length);
-  }
-
-  const payload: any = {
-    model: config.model || 'gpt-3.5-turbo',
-    messages: messages
-  };
-
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok) {
-      if (response.status === 429) throw { status: 429 };
-      throw new Error(`请求失败 (${response.status})`);
-  }
-  const data = await response.json();
-  return data.choices[0]?.message?.content || "";
-};
-
-const Outline: React.FC<OutlineProps> = ({ chapters, currentChapterId, onSelectChapter, setBooks, bookId, settings, bookSummary, onUpdateSummary, isAnthology = false }) => {
+const Outline: React.FC<OutlineProps> = ({
+  chapters,
+  currentChapterId,
+  onSelectChapter,
+  onAddChapter,
+  onRemoveChapter,
+  onUpdateChapter,
+  onReorderChapters,
+  settings,
+  bookSummary,
+  onUpdateSummary,
+  isAnthology = false
+}) => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
@@ -88,39 +57,11 @@ const Outline: React.FC<OutlineProps> = ({ chapters, currentChapterId, onSelectC
   const [hoveredSynopsis, setHoveredSynopsis] = useState<{ id: string, text: string, top: number, left: number } | null>(null);
   const synopsisRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const addChapter = () => {
-    const nextNum = chapters.length + 1;
-    const newId = `chapter-${Date.now()}`;
-    const newChapter: Chapter = {
-      id: newId,
-      title: isAnthology ? '新篇章' : `第 ${nextNum} 章`,
-      content: '',
-      synopsis: '',
-      lastModified: Date.now()
-    };
-    
-    setBooks(prev => prev.map(b => 
-      b.id === bookId ? { ...b, chapters: [...b.chapters, newChapter], currentChapterId: newId } : b
-    ));
-    onSelectChapter(newId);
-  };
-
   const removeChapter = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (chapters.length <= 1) return;
     if (!confirm(isAnthology ? '确定删除这篇作品吗？' : '确定删除该章节吗？内容将无法恢复。')) return;
-
-    setBooks(prev => prev.map(b => {
-      if (b.id === bookId) {
-        const remaining = b.chapters.filter(c => c.id !== id);
-        return { 
-          ...b, 
-          chapters: remaining,
-          currentChapterId: id === b.currentChapterId ? remaining[0].id : b.currentChapterId
-        };
-      }
-      return b;
-    }));
+    onRemoveChapter(id);
   };
 
   const exportChapter = (e: React.MouseEvent, chapter: Chapter) => {
@@ -136,15 +77,7 @@ const Outline: React.FC<OutlineProps> = ({ chapters, currentChapterId, onSelectC
   };
 
   const updateChapterField = (id: string, field: 'title' | 'synopsis', value: string) => {
-    setBooks(prev => prev.map(b => {
-      if (b.id === bookId) {
-        return {
-          ...b,
-          chapters: b.chapters.map(c => c.id === id ? { ...c, [field]: value } : c)
-        };
-      }
-      return b;
-    }));
+    onUpdateChapter(id, { [field]: value });
   };
 
   const handleGenerateSummary = async () => {
@@ -221,15 +154,7 @@ const Outline: React.FC<OutlineProps> = ({ chapters, currentChapterId, onSelectC
       setDragOverIndex(null);
       return;
     }
-    setBooks(prev => prev.map(b => {
-      if (b.id === bookId) {
-        const newChapters = [...b.chapters];
-        const [movedChapter] = newChapters.splice(draggedIndex, 1);
-        newChapters.splice(targetIndex, 0, movedChapter);
-        return { ...b, chapters: newChapters };
-      }
-      return b;
-    }));
+    onReorderChapters(draggedIndex, targetIndex);
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
@@ -267,7 +192,7 @@ const Outline: React.FC<OutlineProps> = ({ chapters, currentChapterId, onSelectC
                 <FileText size={12} className="mr-1.5" /> {isAnthology ? '篇目列表' : '故事脉络'}
             </span>
             <button 
-                onClick={addChapter}
+                onClick={onAddChapter}
                 className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg active:scale-95 ${
                     isGreen 
                     ? 'bg-[#66bb6a] text-white hover:bg-[#43a047] shadow-[#a5d6a7]'

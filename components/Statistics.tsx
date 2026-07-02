@@ -22,6 +22,7 @@ import { BrainCircuit, Loader2, AlertTriangle, X, RefreshCw, Library, Layers, Fe
 import { GoogleGenAI } from "@google/genai";
 import ReactMarkdown from 'react-markdown';
 import { getAnalysisSystemPrompt } from '../utils/ai-prompts';
+import { withRetry } from '../utils/api';
 
 interface StatisticsProps {
   stats: WritingStats;
@@ -54,24 +55,6 @@ interface AnalysisData {
     rating: number; 
     summary: string;
   }[];
-}
-
-// Retry Helper (Duplicated for component isolation)
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> {
-  try {
-    return await fn();
-  } catch (error: any) {
-    const isRateLimit = 
-        error.status === 429 || 
-        error.code === 429 || 
-        (error.message && (error.message.includes('429') || error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED')));
-    
-    if (retries > 0 && isRateLimit) {
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return withRetry(fn, retries - 1, delay * 2);
-    }
-    throw error;
-  }
 }
 
 const Statistics: React.FC<StatisticsProps> = ({ stats, book, settings, onUpdateBook }) => {
